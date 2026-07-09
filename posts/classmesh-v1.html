@@ -183,6 +183,36 @@
       mostly about legibility. If a rule fires six months from now, the output
       should be able to tell you which rule and why.</p>
 
+      <p>Concretely. Here's a rule from the example ruleset:</p>
+
+      <pre class="code-numbered"><code><span class="ln"><span class="tok-k">rules</span>:</span>
+<span class="ln">  - <span class="tok-k">id</span>: <span class="tok-s">payment-failure</span></span>
+<span class="ln">    <span class="tok-k">category</span>: <span class="tok-s">billing</span></span>
+<span class="ln">    <span class="tok-k">regex</span>: [<span class="tok-s">"payment (failed|declined)"</span>]</span></code></pre>
+
+      <p>This line comes in:</p>
+
+      <pre><code>payment declined for order 7</code></pre>
+
+      <p>And exits stage 1 as:</p>
+
+      <pre class="code-numbered"><code><span class="ln">{</span>
+<span class="ln">  <span class="tok-k">"id"</span>: <span class="tok-s">"examples/logs.txt:2"</span>,</span>
+<span class="ln">  <span class="tok-k">"data"</span>: <span class="tok-s">"payment declined for order 7"</span>,</span>
+<span class="ln">  <span class="tok-k">"category"</span>: <span class="tok-s">"billing"</span>,</span>
+<span class="ln">  <span class="tok-k">"confidence"</span>: <span class="tok-n">1</span>,</span>
+<span class="ln">  <span class="tok-k">"stage"</span>: <span class="tok-s">"rules"</span>,</span>
+<span class="ln">  <span class="tok-k">"reasons"</span>: [{<span class="tok-k">"code"</span>: <span class="tok-s">"payment-failure"</span>, <span class="tok-k">"detail"</span>: <span class="tok-s">"regex \"payment (failed|declined)\""</span>}]</span>
+<span class="ln">}</span></code></pre>
+
+      <p>(Formatted for reading; the real output is one object per line.) The
+      same ruleset classifies structured JSON events on their decoded fields:
+      an <code>any</code>/<code>all</code> block can say things like
+      <code>field http.status gte 500</code>, and the reason string in the
+      output reads <code>all(field level == "error" and field http.status
+      &gt;= 500)</code>. Six months from now that line still tells you which
+      rule fired and what it checked.</p>
+
       <h2 id="numbers">The numbers</h2>
 
       <p>Measured on a single core of my Ryzen 7 3800X, re-run for this post. The
