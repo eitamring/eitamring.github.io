@@ -28,51 +28,52 @@
       <h1>ClassMesh v1: classifying a million log lines for the price of electricity</h1>
       <div class="meta">2026-07-31 · <a href="https://github.com/ClassMesh/classmesh">code on GitHub</a> · Go, single binary, MIT</div>
 
-      <p>I spend my days building data pipelines, which means I spend a lot of my days
-      looking at high volume streams of records that need to be sorted into buckets.
-      Logs, events, rows. Some of them matter and most of them don't, and the whole
-      game is deciding which is which without going broke or going slow.</p>
-
-      <p>ClassMesh is my answer to that. It's a classification cascade in Go: a stream
-      of records goes in, each record exits at the cheapest stage that can decide it
-      with confidence, and only the genuinely undecidable residue ever reaches anything
-      expensive. Today I'm shipping v1. This post covers why it exists, how it works,
-      the numbers, and what it honestly doesn't do yet.</p>
+      <p>ClassMesh is a classification cascade I've been building in Go. The short
+      version: a stream of records goes in, each record exits at the cheapest stage
+      that can decide it with enough confidence, and only what's left over gets
+      passed to anything expensive. I just tagged v1, so this seemed like a good
+      time to write up how it works and what it does and doesn't do yet.</p>
 
       <h2>Why I built it</h2>
 
-      <p>There are two standard answers to "classify this firehose" and I dislike both.</p>
+      <p>I work on data pipelines, so a lot of what I deal with is high volume
+      streams of records that need to be sorted into buckets. Logs, events, rows.
+      There are two standard ways to do this and both of them annoy me for
+      different reasons.</p>
 
-      <p>The first is to throw a model at every record. Do the math on that. A million
-      short log lines through a budget LLM API, at roughly 25 input and 5 output tokens
-      each, costs about $6.75 per million lines, and it runs at API latency. That's fine
-      for a demo. It's absurd for a pipeline that sees millions of lines an hour, and the
-      dirty secret is that the overwhelming majority of those lines are health checks and
-      noise that a string comparison could have handled.</p>
+      <p>The first is running a model on every record. The problem is cost.
+      Back of the envelope: a million short log lines through a budget LLM API,
+      at around 25 input and 5 output tokens per line, comes out to about $6.75
+      per million lines, and you're paying API latency on top. For a pipeline
+      that sees millions of lines an hour that adds up fast, and most of those
+      lines are health checks and other noise that a string contains check
+      could have handled anyway.</p>
 
-      <p>The second answer is the hand rolled regex pipeline. Cheap, fast, and it rots.
-      Nobody remembers why rule 14 exists, nobody dares delete it, and there's no concept
-      of confidence or of what happens to records nothing matched. I've written several
-      of these. I've regretted most of them.</p>
+      <p>The second is the hand rolled regex pipeline. I've written a few of
+      these over the years and they always end up in the same place: a file of
+      rules nobody fully remembers the reasons for, no notion of confidence,
+      and no story for what happens to records that nothing matched. It works,
+      but it's not something you enjoy maintaining.</p>
 
-      <p>The middle path seemed obvious once I said it out loud: run the cheap
-      deterministic checks first, let everything they can confidently label exit
-      immediately, and escalate only the leftovers to smarter, slower, pricier stages.
-      Each stage has a confidence gate. A record that clears the gate exits. A record
-      that doesn't gets passed down, and whatever survives every stage lands in a
-      review sink instead of being silently dropped. The expensive stage still exists,
-      it just sees a fraction of a percent of the traffic instead of all of it.</p>
+      <p>What I wanted was the middle option. Run the cheap deterministic checks
+      first, let everything they can confidently label exit right there, and only
+      escalate the leftovers to slower and more expensive stages. Each stage has
+      a confidence gate. Records that clear it exit, records that don't get passed
+      down, and anything that survives every stage goes to a review sink rather
+      than getting silently dropped. The expensive stage can still exist, it just
+      sees a small fraction of the traffic.</p>
 
       <h2>How it works</h2>
 
       <p>Everything in ClassMesh is an interface. Sources produce records, stages
-      classify them, sinks receive them. Today the sources are text files, stdin,
-      and JSONL; the stages are rules, schema checks, and a mock model stand-in;
-      the sinks write JSONL. Tomorrow a source is anything that implements
-      <code>Source</code>. The core engine is payload agnostic on purpose, because
-      logs are the first use case, not the product.</p>
+      classify them, sinks receive them. Right now the sources are text files,
+      stdin, and JSONL, the stages are rules, schema checks, and a mock model
+      stand-in (more on that below), and the sinks write JSONL. Anything that
+      implements <code>Source</code> can be a source, so Kafka or whatever else
+      is possible later without touching the engine. The core is payload agnostic
+      on purpose. Logs are just the first use case.</p>
 
-      <p>A whole cascade is declared in one versioned YAML file:</p>
+      <p>A whole cascade is declared in one YAML file:</p>
 
       <pre><code>version: 1
 input:  { type: text }
@@ -82,23 +83,25 @@ stages:
 sink:   { type: jsonl, stream: stdout }
 review: { type: jsonl, path: review.jsonl }</code></pre>
 
-      <p>You can <code>classmesh validate</code> the config before anything opens an
-      input file. Unknown keys, duplicate stage ids, and out of range gates are rejected
-      up front. When the config declares category routes, classified records get
-      dispatched by category, each route to its own sink, with the default sink as
-      fallback. A top level <code>workers: N</code> classifies records on N goroutines
-      while preserving output order, error reporting, and stats exactly. The default
-      stays serial, because a default should be boring.</p>
+      <p>There's a <code>classmesh validate</code> command that checks the config
+      before any input gets opened. Unknown keys, duplicate stage ids, and out of
+      range gates all get rejected up front, which has saved me from myself a few
+      times already. You can also declare category routes, so classified records
+      get dispatched to different sinks by category. Setting <code>workers: N</code>
+      runs classification on N goroutines while keeping output order and stats the
+      same as the serial version. The default is serial.</p>
 
-      <p>Every classified record comes out as one JSON object with its category, its
-      confidence, which stage decided it, and the matched rule's reason. That last part
-      matters to me. When rule 14 fires in this system, the output tells you rule 14
-      fired and why. The regex pipeline rot problem is mostly a legibility problem.</p>
+      <p>Each classified record comes out as a JSON object with the category, the
+      confidence, which stage decided it, and the matched rule's reason string.
+      The reason part was important to me because the rot in regex pipelines is
+      mostly about legibility. If a rule fires six months from now, the output
+      should be able to tell you which rule and why.</p>
 
       <h2>The numbers</h2>
 
-      <p>Measured on a single core of an AMD Ryzen 7 3800X, with <code>make bench</code>
-      in the repo, so you can check me:</p>
+      <p>Measured on a single core of my Ryzen 7 3800X. The benchmarks are in the
+      repo and run with <code>make bench</code>, so you don't have to take my word
+      for any of this:</p>
 
       <table>
         <tr><th>Path</th><th>Per record</th><th>Throughput</th><th>Allocs</th></tr>
@@ -107,21 +110,20 @@ review: { type: jsonl, path: review.jsonl }</code></pre>
         <tr><td>Full pipeline (engine + rules + sink)</td><td>435 ns</td><td>~2.3M rec/s</td><td>0</td></tr>
       </table>
 
-      <p>The zero in the allocations column is the number I care most about. The hot
-      path does not allocate. Not "rarely allocates", not "amortized". Zero. That's what
-      keeps the throughput flat when the stream gets ugly, because there's no garbage
-      collector waiting to present a bill at the worst moment.</p>
-
-      <p>Getting there was most of the work. The worst case path, where a record walks
-      a rule list full of regexes and matches nothing, started around 7 microseconds
-      and I got it down to about 1. Batch classification went from 7.6ms to 3.0ms for
-      the same batch. None of it was clever. It was profiles, allocation traces, and
-      restructuring code so the compiler could keep things on the stack.
+      <p>The allocations column is the one I spent the most time on. The hot path
+      doesn't allocate at all, which is what keeps throughput stable when the
+      stream gets ugly, since there's no GC pressure building up in the
+      background. Getting there took a while. The worst case path, where a record
+      walks a regex heavy rule list and matches nothing, started around 7
+      microseconds and ended up around 1 after a lot of rounds with pprof and the
+      allocation profiler. Batch classification went from 7.6ms to about 3.0ms.
+      Nothing exotic, mostly restructuring things so values stay on the stack and
+      the regex engine gets asked less often.
       [EDIT: confirm these before/after numbers against your bench logs before publishing.]</p>
 
-      <p>Per record cost depends entirely on your ruleset. Order rules by expected
-      volume so the hot path exits early. That single line of advice is worth more
-      than any optimization in the engine.</p>
+      <p>One practical note: per record cost depends entirely on your ruleset,
+      so order rules by expected volume. The first-rule 27ns number assumes the
+      common case actually hits early.</p>
 
       <h2>Try it in 60 seconds</h2>
 
@@ -130,53 +132,52 @@ cd classmesh
 go run ./services/cli/cmd/classmesh run \
   --rules examples/rules.yml examples/logs.txt</code></pre>
 
-      <p>That classifies the example logs with the example ruleset and prints one JSON
-      object per record, with the undecided counted on stderr. The same binary handles
-      JSONL events classified on their decoded fields with <code>--input jsonl</code>.
-      No dependencies beyond Go.</p>
+      <p>That runs the example ruleset over the example logs and prints one JSON
+      object per record, with undecided records counted on stderr. JSONL events
+      work the same way with <code>--input jsonl</code>, classified on their
+      decoded fields. There are no dependencies beyond Go itself.</p>
 
-      <h2>The good</h2>
+      <h2>What's working well</h2>
 
-      <p>It's one static Go binary. There's nothing to install and nothing to deploy
-      next to it. The interfaces made the whole thing a pleasure to test; the repo has
-      more test files than I expected to write, and the benchmarks are committed right
-      next to the code they measure, so the perf table above is a make target, not a
-      screenshot.</p>
+      <p>The single binary thing has been as convenient as I hoped. There's nothing
+      to install next to it and nothing to configure beyond the YAML. The interface
+      design also made testing much easier than I expected; there are in-memory
+      implementations of source, stage, and sink for tests, and the benchmarks
+      live next to the code they measure, so the table above is a make target
+      rather than a screenshot from some run I can't reproduce.</p>
 
-      <p>The economics work exactly as designed. The rules stage handles the same
-      million lines that would cost $6.75 through an API in well under a second per
-      core, for the cost of the electricity. The cascade only forwards what rules
-      can't decide to anything that costs money, which in most log streams is a
-      small slice of the total.</p>
+      <p>The cost model works out the way the design intended. The rules stage
+      chews through the same million lines that would cost $6.75 via an API in
+      well under a second per core, and only what rules can't decide moves on
+      to anything that costs money.</p>
 
-      <h2>The bad, honestly</h2>
+      <h2>The bad</h2>
 
-      <p>The model stage isn't real yet. v1 ships rules, schema checks, the cascade
-      config, category routing, and the parallel engine. The model tier is a
-      deterministic mock that scores matched records with declared confidences below
-      1.0, which exists so per stage gates and review routing could be built and
-      tested against something. The groundwork for a real model stage is in the repo,
-      including a wordpiece tokenizer, but I'm not going to pretend a stand-in is a
-      model. That's v2.</p>
+      <p>The model stage isn't real yet. v1 is rules, schema checks, the cascade
+      config, category routing, and the parallel engine. The model tier is
+      currently a deterministic mock that scores records with confidences below
+      1.0. It exists so the gating and review routing could be built and tested
+      against something, and I want to be upfront that it's a stand-in. Some of
+      the groundwork for the real thing is already in the repo, including a
+      wordpiece tokenizer, but the actual model stage is v2.</p>
 
-      <p>Sources are files and stdin. If you want Kafka, you're implementing
-      <code>Source</code> yourself for now. And this is not a Datadog replacement or
-      an observability platform. It's a classification engine you point at a stream.
-      If you need dashboards, this is the thing that feeds them, not the thing that
-      draws them.</p>
+      <p>Sources are files and stdin for now, so anything else means implementing
+      <code>Source</code> yourself. And to be clear about what this is: it's a
+      classification engine you point at a stream, not an observability platform.
+      If you need dashboards, this feeds them, it doesn't draw them.</p>
 
       <h2>What's next</h2>
 
-      <p>v2 is the real model stage. I'm also working on something for the tier above
-      that: running small models on the GPU from the same static Go binary, with no
-      Python and no CUDA toolkit, through a pure Go CUDA driver binding I've been
-      building called <a href="https://github.com/eitamring/gocudrv">gocudrv</a>.
-      That's its own post.</p>
+      <p>v2 is the real model stage. Further out, I've been working on running
+      small models on the GPU from the same static Go binary, no Python and no
+      CUDA toolkit, through a pure Go CUDA driver binding called
+      <a href="https://github.com/eitamring/gocudrv">gocudrv</a>. That one is
+      getting its own post.</p>
 
       <hr>
       <p><em>Code: <a href="https://github.com/ClassMesh/classmesh">github.com/ClassMesh/classmesh</a>.
-      Issues and benchmark reproductions welcome. If the numbers don't hold on your
-      hardware, I want to know.</em></p>
+      Issues and benchmark reproductions welcome. If the numbers don't hold on
+      your hardware I'd genuinely like to know.</em></p>
     </article>
   </div>
 </main>

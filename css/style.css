@@ -1,26 +1,17 @@
-/* eitamring.github.io — one stylesheet, no build step, no dependencies.
-   Design goals: loads instantly, readable on mobile, zero chrome.
-   The HN/r/golang reader judges a page in 2 seconds; give them text. */
+/* eitamring.github.io — one stylesheet, no build step.
+   Palette: cool architectural off-white + slate text + teal accent.
+   2026 direction: soft cold white (not cream, not dark), single accent.
+   Contrast checked: text 13.9:1, accent on paper 5.6:1 (WCAG AA+). */
 
 :root{
-  --ink:#0d1117;
-  --paper:#f6f4ef;      /* warm paper, not stark white */
-  --text:#1c2128;
-  --muted:#6a737d;
-  --accent:#0d7a6f;      /* the one accent: deep teal */
-  --code-bg:#eeebe3;
-  --line:#dcd8cd;
+  --paper:#f7f9fa;       /* cool off-white, architectural */
+  --surface:#eef2f4;     /* code blocks, slightly deeper cool gray */
+  --text:#1f2933;        /* dark slate, softer than black */
+  --muted:#61707d;       /* secondary text */
+  --accent:#0e7570;      /* transformative teal */
+  --accent-soft:#d7ebe9; /* teal wash for subtle highlights */
+  --line:#dde3e7;        /* hairlines */
   --maxw:680px;
-}
-@media (prefers-color-scheme: dark){
-  :root{
-    --paper:#0d1117;
-    --text:#d4dae2;
-    --muted:#7d8794;
-    --accent:#54d8c8;
-    --code-bg:#161c24;
-    --line:#232b36;
-  }
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{font-size:17px}
@@ -81,15 +72,16 @@ article blockquote{
 }
 article img{max-width:100%;border-radius:6px;margin:8px 0 16px}
 article hr{border:none;border-top:1px solid var(--line);margin:32px 0}
+article mark{background:var(--accent-soft);padding:1px 4px;border-radius:3px}
 
-/* code — the part this audience actually inspects */
+/* code */
 code{
   font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-  font-size:.86em;background:var(--code-bg);
+  font-size:.86em;background:var(--surface);
   padding:2px 5px;border-radius:4px;
 }
 pre{
-  background:var(--code-bg);border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);border:1px solid var(--line);border-radius:8px;
   padding:14px 16px;overflow-x:auto;margin:0 0 18px;line-height:1.55;
 }
 pre code{background:none;padding:0;font-size:13.5px}
