@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClassMesh v1: classifying a million log lines for the price of electricity</title>
+<meta name="description" content="A confidence-gated classification cascade in Go: deterministic rules first, models next, expensive calls only for what's left. Zero allocations on the hot path.">
+<link rel="stylesheet" href="/css/style.css">
+<!-- If cross-posting from Hashnode, set the canonical there to point HERE. -->
+</head>
+<body>
+
+<header class="site">
+  <div class="container">
+    <div class="name"><a href="/">eitam ring</a></div>
+    <div class="tagline">systems notes — Go, GPUs, and pipelines that don't allocate</div>
+    <nav>
+      <a href="/">posts</a>
+      <a href="https://github.com/eitamring/gocudrv">gocudrv</a>
+      <a href="https://github.com/ClassMesh/classmesh">classmesh</a>
+      <a href="https://github.com/eitamring">github</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="container">
+    <article>
+      <h1>ClassMesh v1: classifying a million log lines for the price of electricity</h1>
+      <div class="meta">2026-07-31 · <a href="https://github.com/ClassMesh/classmesh">code on GitHub</a> · Go, single binary, MIT</div>
+
+      <!-- ==================================================================
+           SKELETON — port your existing draft into these sections.
+           Structure follows what lands with the r/golang + HN crowd:
+           pain → idea → numbers → how it works → limits → what's next.
+           Facts below are pre-filled from the repo as of 2026-07-09;
+           REPLACE bench numbers with your make-bench output (checklist #3).
+           ================================================================== -->
+
+      <h2>The pain</h2>
+      <p>Classifying high-volume data with an LLM per record is slow and expensive.
+      Classifying a million short log lines through a budget LLM API costs roughly
+      <strong>$6.75 per million lines</strong> and runs at API latency.
+      Hand-rolled regex pipelines are cheap but rot.</p>
+      <!-- Open with the cost math. It's your strongest hook. -->
+
+      <h2>The idea: a confidence-gated cascade</h2>
+      <p>Each record exits at the cheapest stage that can decide it.</p>
+      <pre><code>source → [ rules ] → [ model ] → [ stage N ] → sink
+             │ confident?   │ confident?
+             └─ exit early ─┴─ exit early     uncertain → review sink</code></pre>
+
+      <h2>The numbers</h2>
+      <!-- REPLACE with your actual make-bench output. Never publish a number
+           the repo can't reproduce. -->
+      <table>
+        <tr><th>Path</th><th>Per record</th><th>Throughput</th><th>Allocs</th></tr>
+        <tr><td>Rules stage, first-rule hit</td><td>27 ns</td><td>~37M rec/s</td><td>0</td></tr>
+        <tr><td>Rules stage, worst case (20-rule walk)</td><td>~7 µs</td><td>~140k rec/s</td><td>0</td></tr>
+        <tr><td>Full pipeline (engine + rules + sink)</td><td>435 ns</td><td>~2.3M rec/s</td><td>0</td></tr>
+      </table>
+      <p>Single core, AMD Ryzen 7 3800X. Reproduce: <code>make bench</code>.</p>
+
+      <h2>How it works</h2>
+      <p><!-- Your draft's architecture section: Source/Stage/Sink contracts,
+           the YAML cascade config, per-stage gates, review routing,
+           the parallel engine preserving output order. --></p>
+
+      <h2>Try it in 60 seconds</h2>
+      <pre><code>git clone https://github.com/ClassMesh/classmesh
+cd classmesh
+go run ./services/cli/cmd/classmesh run \
+  --rules examples/rules.yml examples/logs.txt</code></pre>
+
+      <h2>Honest limits</h2>
+      <p><!-- v1 scope: rules + schema + cascade + parallel engine.
+           The model stage is v2 — mock stands in today, wordpiece tokenizer
+           is the groundwork. Say it plainly; this section buys the trust. --></p>
+
+      <h2>What's next</h2>
+      <p><!-- One-line teaser only: a GPU model tier, via a pure-Go CUDA
+           binding. No "liquid" here. This is the thread to Stage 0. --></p>
+
+      <hr>
+      <p><em>Code: <a href="https://github.com/ClassMesh/classmesh">github.com/ClassMesh/classmesh</a>.
+      Issues and benchmark reproductions welcome.</em></p>
+    </article>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="container">
+    © eitam ring · <a href="https://github.com/eitamring">github</a> · also on <a href="https://valkdb.hashnode.dev">hashnode</a>
+  </div>
+</footer>
+
+</body>
+</html>
