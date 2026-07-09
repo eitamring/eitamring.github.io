@@ -6,13 +6,33 @@
 <title>ClassMesh v1: classifying a million log lines for the price of electricity</title>
 <meta name="description" content="A confidence-gated classification cascade in Go. Deterministic rules first, models next, expensive calls only for what's left. Zero allocations on the hot path.">
 <link rel="stylesheet" href="/css/style.css">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='18' cy='12' r='7' fill='%230e7570'/%3E%3Ccircle cx='46' cy='12' r='7' fill='%230e7570'/%3E%3Cellipse cx='32' cy='38' rx='24' ry='22' fill='%230e7570'/%3E%3Ccircle cx='24' cy='32' r='7.5' fill='%23fff'/%3E%3Ccircle cx='40' cy='32' r='7.5' fill='%23fff'/%3E%3Ccircle cx='26' cy='33' r='3' fill='%231f2933'/%3E%3Ccircle cx='38' cy='33' r='3' fill='%231f2933'/%3E%3Cellipse cx='32' cy='43' rx='6' ry='4.5' fill='%23d7ebe9'/%3E%3Ccircle cx='32' cy='40.5' r='1.8' fill='%231f2933'/%3E%3Crect x='28.6' y='45' width='3.2' height='4.5' rx='1' fill='%23fff'/%3E%3Crect x='32.2' y='45' width='3.2' height='4.5' rx='1' fill='%23fff'/%3E%3C/svg%3E">
 </head>
 <body>
 
 <header class="site">
   <div class="container">
-    <div class="name"><a href="/">eitam ring</a></div>
-    <div class="tagline">systems notes: Go, GPUs, and pipelines that don't allocate</div>
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 64 64" width="38" height="38" aria-hidden="true">
+        <circle cx="18" cy="12" r="7" fill="#0e7570"/>
+        <circle cx="46" cy="12" r="7" fill="#0e7570"/>
+        <circle cx="18" cy="12" r="3" fill="#d7ebe9"/>
+        <circle cx="46" cy="12" r="3" fill="#d7ebe9"/>
+        <ellipse cx="32" cy="38" rx="24" ry="22" fill="#0e7570"/>
+        <circle cx="24" cy="32" r="7.5" fill="#fff"/>
+        <circle cx="40" cy="32" r="7.5" fill="#fff"/>
+        <circle cx="26" cy="33" r="3" fill="#1f2933"/>
+        <circle cx="38" cy="33" r="3" fill="#1f2933"/>
+        <ellipse cx="32" cy="43" rx="6" ry="4.5" fill="#d7ebe9"/>
+        <circle cx="32" cy="40.5" r="1.8" fill="#1f2933"/>
+        <rect x="28.6" y="45" width="3.2" height="4.5" rx="1" fill="#fff"/>
+        <rect x="32.2" y="45" width="3.2" height="4.5" rx="1" fill="#fff"/>
+      </svg>
+      <div>
+        <div class="name"><a href="/">eitam ring</a></div>
+        <div class="tagline">systems notes — Go, GPUs, and pipelines that don't allocate</div>
+      </div>
+    </div>
     <nav>
       <a href="/">posts</a>
       <a href="https://github.com/eitamring/gocudrv">gocudrv</a>
@@ -23,7 +43,19 @@
 </header>
 
 <main>
-  <div class="container">
+  <div class="post-grid">
+
+    <nav class="rail toc" aria-label="Table of contents">
+      <h4>contents</h4>
+      <a href="#why">Why I built it</a>
+      <a href="#how">How it works</a>
+      <a href="#numbers">The numbers</a>
+      <a href="#try">Try it in 60 seconds</a>
+      <a href="#good">What's working well</a>
+      <a href="#bad">The bad</a>
+      <a href="#next">What's next</a>
+    </nav>
+
     <article>
       <h1>ClassMesh v1: classifying a million log lines for the price of electricity</h1>
       <div class="meta">2026-07-31 · <a href="https://github.com/ClassMesh/classmesh">code on GitHub</a> · Go, single binary, MIT</div>
@@ -34,7 +66,7 @@
       passed to anything expensive. I just tagged v1, so this seemed like a good
       time to write up how it works and what it does and doesn't do yet.</p>
 
-      <h2>Why I built it</h2>
+      <h2 id="why">Why I built it</h2>
 
       <p>I work on data pipelines, so a lot of what I deal with is high volume
       streams of records that need to be sorted into buckets. Logs, events, rows.
@@ -63,7 +95,7 @@
       than getting silently dropped. The expensive stage can still exist, it just
       sees a small fraction of the traffic.</p>
 
-      <h2>How it works</h2>
+      <h2 id="how">How it works</h2>
 
       <p>Everything in ClassMesh is an interface. Sources produce records, stages
       classify them, sinks receive them. Right now the sources are text files,
@@ -73,15 +105,69 @@
       is possible later without touching the engine. The core is payload agnostic
       on purpose. Logs are just the first use case.</p>
 
+      <p>Here is more or less what it looks like:</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 660 392" width="660" role="img" aria-label="Cascade flow: a stream enters the rules stage; decided records exit to the classified JSONL sink; undecided records escalate to the model stage and finally to the review sink.">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#61707d"/>
+            </marker>
+          </defs>
+          <style>
+            .box{fill:#e8f1f0;stroke:#0e7570;stroke-width:1.2}
+            .boxalt{fill:#f7f9fa;stroke:#61707d;stroke-width:1.2;stroke-dasharray:5 4}
+            .t{font:600 13px ui-monospace,Menlo,Consolas,monospace;fill:#1f2933;text-anchor:middle}
+            .t2{font:11.5px ui-monospace,Menlo,Consolas,monospace;fill:#61707d;text-anchor:middle}
+            .lbl{font:11.5px ui-monospace,Menlo,Consolas,monospace;fill:#61707d}
+            .edge{stroke:#61707d;stroke-width:1.2;fill:none}
+          </style>
+
+          <rect class="box" x="70" y="14" width="240" height="42" rx="6"/>
+          <text class="t" x="190" y="40">log / event stream</text>
+
+          <line class="edge" x1="190" y1="56" x2="190" y2="102" marker-end="url(#arr)"/>
+          <text class="lbl" x="200" y="84">records</text>
+
+          <rect class="box" x="70" y="106" width="240" height="56" rx="6"/>
+          <text class="t" x="190" y="129">stage 1: rules</text>
+          <text class="t2" x="190" y="148">46 ns/record, confidence 1.0</text>
+
+          <path class="edge" d="M310,134 C 370,134 380,160 416,172" marker-end="url(#arr)"/>
+          <text class="lbl" x="336" y="126">decided</text>
+
+          <line class="edge" x1="190" y1="162" x2="190" y2="218" marker-end="url(#arr)"/>
+          <text class="lbl" x="200" y="194">undecided</text>
+
+          <rect class="box" x="70" y="222" width="240" height="56" rx="6"/>
+          <text class="t" x="190" y="245">stage 2: model</text>
+          <text class="t2" x="190" y="264">deterministic mock in v1</text>
+
+          <path class="edge" d="M310,250 C 375,250 385,215 416,198" marker-end="url(#arr)"/>
+          <text class="lbl" x="336" y="244">decided</text>
+
+          <line class="edge" x1="190" y1="278" x2="190" y2="334" marker-end="url(#arr)"/>
+          <text class="lbl" x="200" y="310">still undecided</text>
+
+          <rect class="boxalt" x="70" y="338" width="240" height="42" rx="6"/>
+          <text class="t" x="190" y="364">review sink</text>
+
+          <rect class="box" x="408" y="158" width="226" height="56" rx="6"/>
+          <text class="t" x="521" y="181">classified JSONL</text>
+          <text class="t2" x="521" y="200">category + confidence + reason</text>
+        </svg>
+        <figcaption>every record exits at the cheapest stage that can decide it</figcaption>
+      </figure>
+
       <p>A whole cascade is declared in one YAML file:</p>
 
-      <pre><code>version: 1
-input:  { type: text }
-stages:
-  - { id: rules,  type: rules,  path: rules.yml, gate: 1.0 }
-  - { id: schema, type: schema, path: schema.yml }
-sink:   { type: jsonl, stream: stdout }
-review: { type: jsonl, path: review.jsonl }</code></pre>
+      <pre class="code-numbered"><code><span class="ln"><span class="tok-k">version</span>: <span class="tok-n">1</span></span>
+<span class="ln"><span class="tok-k">input</span>:  { <span class="tok-k">type</span>: <span class="tok-s">text</span> }</span>
+<span class="ln"><span class="tok-k">stages</span>:</span>
+<span class="ln">  - { <span class="tok-k">id</span>: <span class="tok-s">rules</span>,  <span class="tok-k">type</span>: <span class="tok-s">rules</span>,  <span class="tok-k">path</span>: <span class="tok-s">rules.yml</span>, <span class="tok-k">gate</span>: <span class="tok-n">1.0</span> }</span>
+<span class="ln">  - { <span class="tok-k">id</span>: <span class="tok-s">schema</span>, <span class="tok-k">type</span>: <span class="tok-s">schema</span>, <span class="tok-k">path</span>: <span class="tok-s">schema.yml</span> }</span>
+<span class="ln"><span class="tok-k">sink</span>:   { <span class="tok-k">type</span>: <span class="tok-s">jsonl</span>, <span class="tok-k">stream</span>: <span class="tok-s">stdout</span> }</span>
+<span class="ln"><span class="tok-k">review</span>: { <span class="tok-k">type</span>: <span class="tok-s">jsonl</span>, <span class="tok-k">path</span>: <span class="tok-s">review.jsonl</span> }</span></code></pre>
 
       <p>There's a <code>classmesh validate</code> command that checks the config
       before any input gets opened. Unknown keys, duplicate stage ids, and out of
@@ -97,35 +183,38 @@ review: { type: jsonl, path: review.jsonl }</code></pre>
       mostly about legibility. If a rule fires six months from now, the output
       should be able to tell you which rule and why.</p>
 
-      <h2>The numbers</h2>
+      <h2 id="numbers">The numbers</h2>
 
-      <p>Measured on a single core of my Ryzen 7 3800X. The benchmarks are in the
-      repo and run with <code>make bench</code>, so you don't have to take my word
-      for any of this:</p>
+      <p>Measured on a single core of my Ryzen 7 3800X, re-run for this post. The
+      benchmarks are in the repo and run with <code>make bench</code>, so you
+      don't have to take my word for any of this:</p>
 
       <table>
         <tr><th>Path</th><th>Per record</th><th>Throughput</th><th>Allocs</th></tr>
-        <tr><td>Rules stage, first-rule hit</td><td>27 ns</td><td>~37M rec/s</td><td>0</td></tr>
-        <tr><td>Rules stage, worst case (20-rule walk, regex heavy)</td><td>~7 µs</td><td>~140k rec/s</td><td>0</td></tr>
-        <tr><td>Full pipeline (engine + rules + sink)</td><td>435 ns</td><td>~2.3M rec/s</td><td>0</td></tr>
+        <tr><td>Rules stage, first-rule hit</td><td>46 ns</td><td>~22M rec/s</td><td>0</td></tr>
+        <tr><td>Rules stage, worst case (20-rule walk, regex heavy)</td><td>~6-7 µs</td><td>~150k rec/s</td><td>0</td></tr>
+        <tr><td>Full pipeline (engine + rules + sink)</td><td>~500 ns</td><td>~2M rec/s</td><td>0</td></tr>
       </table>
 
       <p>The allocations column is the one I spent the most time on. The hot path
       doesn't allocate at all, which is what keeps throughput stable when the
       stream gets ugly, since there's no GC pressure building up in the
-      background. Getting there took a while. The worst case path, where a record
-      walks a regex heavy rule list and matches nothing, started around 7
-      microseconds and ended up around 1 after a lot of rounds with pprof and the
-      allocation profiler. Batch classification went from 7.6ms to about 3.0ms.
-      Nothing exotic, mostly restructuring things so values stay on the stack and
-      the regex engine gets asked less often.
-      [EDIT: confirm these before/after numbers against your bench logs before publishing.]</p>
+      background. Getting there took a while. The miss path against
+      literal-bearing patterns, where a record walks the rule list and matches
+      nothing, started around 7 microseconds and ended up around 1 thanks to a
+      compile-time literal prefilter: a pattern with a literal prefix hides
+      behind a cheap contains check, so the regex engine only runs on lines that
+      could possibly match. A genuinely regex-heavy walk still costs the ~6-7
+      microseconds in the table. Concurrent batch classification went from 7.6ms
+      to about 3.0ms for 100k records across 16 workers. Nothing exotic, mostly
+      restructuring things so values stay on the stack and the regex engine gets
+      asked less often.</p>
 
       <p>One practical note: per record cost depends entirely on your ruleset,
-      so order rules by expected volume. The first-rule 27ns number assumes the
+      so order rules by expected volume. The first-rule 46ns number assumes the
       common case actually hits early.</p>
 
-      <h2>Try it in 60 seconds</h2>
+      <h2 id="try">Try it in 60 seconds</h2>
 
       <pre><code>git clone https://github.com/ClassMesh/classmesh
 cd classmesh
@@ -133,11 +222,28 @@ go run ./services/cli/cmd/classmesh run \
   --rules examples/rules.yml examples/logs.txt</code></pre>
 
       <p>That runs the example ruleset over the example logs and prints one JSON
-      object per record, with undecided records counted on stderr. JSONL events
-      work the same way with <code>--input jsonl</code>, classified on their
-      decoded fields. There are no dependencies beyond Go itself.</p>
+      object per classified record, with undecided records counted on stderr.
+      JSONL events work the same way with <code>--input jsonl</code>, classified
+      on their decoded fields. The only dependencies beyond the standard library
+      are two small pure-Go ones: yaml.v3 for config parsing and x/text for
+      tokenizer normalization.</p>
 
-      <h2>What's working well</h2>
+      <p>The bundled sample is four lines, which proves the mechanism, not the
+      throughput. For volume there's a generator in the repo that writes a
+      deterministic weighted stream: 70% health-check noise, 15% billing, 10%
+      auth, 5% that nothing matches, which is roughly what real traffic looks
+      like:</p>
+
+      <pre><code>go run examples/genlogs.go -n 1000000 > logs-1m.txt
+go run ./services/cli/cmd/classmesh run \
+  --rules examples/rules.yml logs-1m.txt > /dev/null</code></pre>
+
+      <p>On my machine that reports <code>processed=1000000 classified=950243
+      review=49757</code> on stderr in about 0.7 seconds, JSON output included.
+      Same seed, same stream, so your counts should match exactly; only the
+      wall time is yours.</p>
+
+      <h2 id="good">What's working well</h2>
 
       <p>The single binary thing has been as convenient as I hoped. There's nothing
       to install next to it and nothing to configure beyond the YAML. The interface
@@ -148,10 +254,11 @@ go run ./services/cli/cmd/classmesh run \
 
       <p>The cost model works out the way the design intended. The rules stage
       chews through the same million lines that would cost $6.75 via an API in
-      well under a second per core, and only what rules can't decide moves on
-      to anything that costs money.</p>
+      under a second per core, output included, and the generator above is the
+      receipt. Only what rules can't decide moves on to anything that costs
+      money.</p>
 
-      <h2>The bad</h2>
+      <h2 id="bad">The bad</h2>
 
       <p>The model stage isn't real yet. v1 is rules, schema checks, the cascade
       config, category routing, and the parallel engine. The model tier is
@@ -166,7 +273,7 @@ go run ./services/cli/cmd/classmesh run \
       classification engine you point at a stream, not an observability platform.
       If you need dashboards, this feeds them, it doesn't draw them.</p>
 
-      <h2>What's next</h2>
+      <h2 id="next">What's next</h2>
 
       <p>v2 is the real model stage. Further out, I've been working on running
       small models on the GPU from the same static Go binary, no Python and no
@@ -179,6 +286,19 @@ go run ./services/cli/cmd/classmesh run \
       Issues and benchmark reproductions welcome. If the numbers don't hold on
       your hardware I'd genuinely like to know.</em></p>
     </article>
+
+    <aside class="rail repos" aria-label="Code links">
+      <h4>code</h4>
+      <a href="https://github.com/ClassMesh/classmesh">classmesh</a>
+      <div class="desc">this post's repo</div>
+      <a href="https://github.com/eitamring/gocudrv">gocudrv</a>
+      <div class="desc">pure-Go CUDA driver</div>
+      <a href="https://github.com/eitamring">github profile</a>
+      <div class="desc">everything else</div>
+      <a href="https://valkdb.hashnode.dev">hashnode</a>
+      <div class="desc">older notes</div>
+    </aside>
+
   </div>
 </main>
 
