@@ -52,6 +52,7 @@
       <a href="#how">How it works</a>
       <a href="#numbers">The numbers</a>
       <a href="#try">Try it in 60 seconds</a>
+      <a href="#playground">Or try a line right here</a>
       <a href="#good">What's working well</a>
       <a href="#bad">The bad</a>
       <a href="#next">What's next</a>
@@ -274,6 +275,83 @@ go run ./services/cli/cmd/classmesh run \
       Same seed, same stream, so your counts should match exactly; only the
       wall time is yours.</p>
 
+      <p>Since tagging v1 the repo also ships the full cascade as a runnable
+      demo, not just the rules stage. A second generator, a config that
+      declares both tiers, and three commands (<code>classmesh</code> here is
+      the binary <code>make build</code> puts in <code>bin/</code>):</p>
+
+      <pre><code>go run examples/genprod.go -n 1000000 > prod.log
+classmesh validate --config examples/classmesh.yaml
+classmesh run --config examples/classmesh.yaml prod.log > classified.jsonl</code></pre>
+
+      <p>genprod writes a million production-shaped lines: access logs, health
+      probes, payments, auth events, warns, errors, business chatter.
+      Deterministic by seed, like the first generator. The rules tier decides
+      88% of the stream, the mock model tier behind its 0.7 gate takes another
+      6%, and the last 6% lands in review.jsonl. Probe noise gets classified
+      and then dropped by a route, so stderr reads <code>processed=1000000
+      classified=940162 review=59838</code> while classified.jsonl itself
+      holds 720,490 records. The whole run takes about 1.7 seconds on my
+      machine. Same seed, same numbers.</p>
+
+      <h2 id="playground">Or try a line right here</h2>
+
+      <p>The demo above needs a clone and a build. If you just want to poke
+      at the cascade, the same two-tier ruleset from <code>examples/</code>
+      is re-implemented below. To be clear about what this is: a faithful
+      re-implementation of the example ruleset running in this page, not the
+      real binary; the repo runs the real thing. Same semantics though: tiers
+      in order, first match wins, matches are case-sensitive. Type a line, or
+      throw one of the demo's own lines at it.</p>
+
+      <div class="pg">
+        <form class="pg-form" id="pg-form">
+          <label class="pg-vh" for="pg-line">log line to classify</label>
+          <input id="pg-line" type="text" autocomplete="off" spellcheck="false"
+            placeholder="type a log line, or pick one below">
+          <button type="submit">classify</button>
+        </form>
+        <p class="pg-label">the demo's eight lines</p>
+        <div class="pg-presets" id="pg-presets"></div>
+        <details class="pg-rules">
+          <summary>the rules this playground implements, in match order</summary>
+          <div class="pg-cols">
+            <div>
+              <p class="pg-colh">tier 1 - rules - every match 1.0</p>
+              <ol>
+                <li><b>health-noise</b>: contains "/healthz" / "/readiness" -&gt; noise</li>
+                <li><b>access-ok</b>: contains "status=200" / "status=201" / "status=204" -&gt; traffic</li>
+                <li><b>app-ops</b>: contains "cache miss" / "job completed" / "connection pool" -&gt; ops</li>
+                <li><b>payment-event</b>: regex payment (succeeded|declined|failed) -&gt; billing</li>
+                <li><b>auth-signal</b>: contains "unauthorized" / "login failed" / "rate limited" -&gt; auth</li>
+                <li><b>alert</b>: regex status=[45][0-9][0-9], or contains "error " / "panic" / "OOMKilled" -&gt; alert</li>
+              </ol>
+            </div>
+            <div>
+              <p class="pg-colh">tier 2 - mock - gate 0.7</p>
+              <ol>
+                <li>contains "warn " -&gt; <b>anomaly, 0.85</b>: clears the gate</li>
+                <li>contains "shipment " / "inventory " -&gt; <b>logistics, 0.60</b>: fails the gate</li>
+                <li>anything else -&gt; <b>unknown, 0.40</b>: fails the gate</li>
+              </ol>
+            </div>
+          </div>
+        </details>
+        <div class="pg-result" id="pg-result" hidden>
+          <ol class="pg-steps" id="pg-steps">
+            <li><span class="pg-stk">tier 1 - rules</span><span class="pg-stv">-</span></li>
+            <li><span class="pg-stk">tier 2 - mock</span><span class="pg-stv">-</span></li>
+            <li><span class="pg-stk">gate 0.7</span><span class="pg-stv">-</span></li>
+            <li><span class="pg-stk">destination</span><span class="pg-stv">-</span></li>
+          </ol>
+          <div class="pg-record" id="pg-record" role="status" hidden>
+            <p class="pg-label" id="pg-outlabel">the record</p>
+            <pre class="code-numbered pg-json"><code id="pg-out"></code></pre>
+            <p class="pg-dest" id="pg-dest"></p>
+          </div>
+        </div>
+      </div>
+
       <h2 id="good">What's working well</h2>
 
       <p>The single binary thing has been as convenient as I hoped. There's nothing
@@ -336,6 +414,156 @@ go run ./services/cli/cmd/classmesh run \
     © eitam ring · <a href="https://github.com/eitamring">github</a>
   </div>
 </footer>
+
+<script>
+/* cascade playground: a faithful re-implementation of examples/prod-rules.yml,
+   examples/mock.yml and the 0.7 gate from examples/classmesh.yaml.
+   Semantics match the binary: tiers in order, first match wins, case-sensitive
+   contains, the two regexes, mock scores 0.85 / 0.60 / 0.40. The reason detail
+   strings echo the CLI's own output format. */
+(function(){
+  var input=document.getElementById('pg-line');
+  var form=document.getElementById('pg-form');
+  var result=document.getElementById('pg-result');
+  var record=document.getElementById('pg-record');
+  var steps=document.querySelectorAll('#pg-steps li');
+  var out=document.getElementById('pg-out');
+  var outlabel=document.getElementById('pg-outlabel');
+  var dest=document.getElementById('pg-dest');
+  var timers=[];
+  var lineNo=0;
+
+  var T1=[
+    {id:'health-noise',cat:'noise',
+      detail:'contains "/healthz" or contains "/readiness"',
+      m:function(l){return l.indexOf('/healthz')>-1||l.indexOf('/readiness')>-1}},
+    {id:'access-ok',cat:'traffic',
+      detail:'contains "status=200" or contains "status=201" or contains "status=204"',
+      m:function(l){return l.indexOf('status=200')>-1||l.indexOf('status=201')>-1||l.indexOf('status=204')>-1}},
+    {id:'app-ops',cat:'ops',
+      detail:'contains "cache miss" or contains "job completed" or contains "connection pool"',
+      m:function(l){return l.indexOf('cache miss')>-1||l.indexOf('job completed')>-1||l.indexOf('connection pool')>-1}},
+    {id:'payment-event',cat:'billing',
+      detail:'regex "payment (succeeded|declined|failed)"',
+      m:function(l){return /payment (succeeded|declined|failed)/.test(l)}},
+    {id:'auth-signal',cat:'auth',
+      detail:'any(contains "unauthorized" or contains "login failed" or contains "rate limited")',
+      m:function(l){return l.indexOf('unauthorized')>-1||l.indexOf('login failed')>-1||l.indexOf('rate limited')>-1}},
+    {id:'alert',cat:'alert',
+      detail:'any(regex "status=[45][0-9][0-9]" or contains "error " or contains "panic" or contains "OOMKilled")',
+      m:function(l){return /status=[45][0-9][0-9]/.test(l)||l.indexOf('error ')>-1||l.indexOf('panic')>-1||l.indexOf('OOMKilled')>-1}}
+  ];
+  function tier2(l){
+    if(l.indexOf('warn ')>-1)
+      return{matcher:'contains "warn "',cat:'anomaly',conf:'0.85',pass:true};
+    if(l.indexOf('shipment ')>-1||l.indexOf('inventory ')>-1)
+      return{matcher:'contains "shipment " / "inventory "',cat:'logistics',conf:'0.60',pass:false};
+    return{matcher:'mock default',cat:'unknown',conf:'0.40',pass:false};
+  }
+
+  var PRESETS=['GET /healthz 200','...status=200 latency_ms=5...',
+    'payment declined for order 7...','blocked: unauthorized token...',
+    'error service=api upstream timeout...','warn service=db slow query...',
+    'shipment 84712 dispatched...','tick 8912 drift 3ms'];
+  var box=document.getElementById('pg-presets');
+  PRESETS.forEach(function(p){
+    var b=document.createElement('button');
+    b.type='button'; b.className='pg-preset'; b.textContent=p;
+    b.addEventListener('click',function(){input.value=p;run()});
+    box.appendChild(b);
+  });
+
+  function setStep(i,cls,txt){
+    steps[i].className=cls;
+    steps[i].querySelector('.pg-stv').textContent=txt;
+  }
+  function row(parts){
+    var s=document.createElement('span'); s.className='ln';
+    parts.forEach(function(p){
+      if(typeof p==='string'){s.appendChild(document.createTextNode(p));return}
+      var t=document.createElement('span'); t.className=p[0]; t.textContent=p[1];
+      s.appendChild(t);
+    });
+    return s;
+  }
+  /* rec: {id,data,cat,confTxt, full?, stage, code, detail} - field order and
+     formatting mirror the CLI (confidence prints as 1, 0.85 or 0). */
+  function renderJSON(rec){
+    out.textContent='';
+    out.appendChild(row(['{']));
+    out.appendChild(row(['  ',['tok-k','"id"'],': ',['tok-s',JSON.stringify(rec.id)],',']));
+    out.appendChild(row(['  ',['tok-k','"data"'],': ',['tok-s',JSON.stringify(rec.data)],',']));
+    out.appendChild(row(['  ',['tok-k','"category"'],': ',['tok-s',JSON.stringify(rec.cat)],',']));
+    out.appendChild(row(['  ',['tok-k','"confidence"'],': ',['tok-n',rec.confTxt],rec.full?',':'']));
+    if(rec.full){
+      out.appendChild(row(['  ',['tok-k','"stage"'],': ',['tok-s',JSON.stringify(rec.stage)],',']));
+      out.appendChild(row(['  ',['tok-k','"reasons"'],': [{',['tok-k','"code"'],': ',
+        ['tok-s',JSON.stringify(rec.code)],', ',['tok-k','"detail"'],': ',
+        ['tok-s',JSON.stringify(rec.detail)],'}]']));
+    }
+    out.appendChild(row(['}']));
+  }
+  function setDest(cls,txt){dest.className='pg-dest '+cls;dest.textContent=txt}
+
+  function run(){
+    var line=input.value;
+    if(!line){input.focus();return}
+    timers.forEach(clearTimeout); timers=[];
+    lineNo++;
+    var id='playground:'+lineNo;
+
+    var plan=[];
+    var rule=null;
+    for(var i=0;i<T1.length;i++){if(T1[i].m(line)){rule=T1[i];break}}
+    if(rule){
+      plan.push([0,'pg-hit','matched '+rule.id+' -> '+rule.cat+', confidence 1.0']);
+      plan.push([1,'pg-skip','never reached - tier 1 decided']);
+      plan.push([2,'pg-skip','never reached - tier 1 gate is 1.0 and always passes']);
+      renderJSON({id:id,data:line,cat:rule.cat,confTxt:'1',full:true,
+        stage:'rules',code:rule.id,detail:rule.detail});
+      if(rule.cat==='noise'){
+        plan.push([3,'pg-drop','route: noise -> drop - classified, then discarded']);
+        outlabel.textContent='the record the route discarded - written nowhere';
+        setDest('pg-dest-drop','-> dropped (route: noise -> drop)');
+      }else{
+        plan.push([3,'pg-hit','classified.jsonl']);
+        outlabel.textContent='the record, as it lands in classified.jsonl';
+        setDest('pg-dest-ok','-> classified.jsonl');
+      }
+    }else{
+      var m=tier2(line);
+      plan.push([0,'pg-esc','no rule matched - escalate']);
+      plan.push([1,m.pass?'pg-hit':'pg-esc','matched '+m.matcher+' -> '+m.cat+', '+m.conf]);
+      if(m.pass){
+        plan.push([2,'pg-hit',m.conf+' >= 0.7 - passes']);
+        plan.push([3,'pg-hit','classified.jsonl, stage=model']);
+        renderJSON({id:id,data:line,cat:m.cat,confTxt:m.conf,full:true,
+          stage:'model',code:'mock',detail:'mock score '+m.conf+' for "'+m.cat+'"'});
+        outlabel.textContent='the record, as it lands in classified.jsonl';
+        setDest('pg-dest-ok','-> classified.jsonl, stage=model');
+      }else{
+        plan.push([2,'pg-esc',m.conf+' < 0.7 - fails']);
+        plan.push([3,'pg-esc','review.jsonl']);
+        renderJSON({id:id,data:line,cat:'',confTxt:'0',full:false});
+        outlabel.textContent='the record, as it lands in review.jsonl';
+        setDest('pg-dest-rev','-> review.jsonl (the '+m.conf+' guess did not clear the gate, so no category is kept)');
+      }
+    }
+
+    result.hidden=false;
+    record.hidden=true;
+    steps.forEach(function(s){s.className='pg-pending';s.querySelector('.pg-stv').textContent='-'});
+    var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var step=reduce?0:200;
+    plan.forEach(function(p,idx){
+      timers.push(setTimeout(function(){setStep(p[0],p[1],p[2])},(idx+1)*step));
+    });
+    timers.push(setTimeout(function(){record.hidden=false},(plan.length+1)*step));
+  }
+
+  form.addEventListener('submit',function(e){e.preventDefault();run()});
+})();
+</script>
 
 </body>
 </html>

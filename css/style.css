@@ -161,3 +161,98 @@ footer.site a:hover{color:var(--accent)}
   html{font-size:16px}
   .post-list li{flex-direction:column;gap:2px}
 }
+
+/* ---- cascade playground (posts/classmesh-v1.html), all classes .pg- scoped.
+   Reuses the site palette: teal for decided, the .tok-s brown (#8a5a2b) for
+   doubt/review, muted for dropped. Light theme only, like the rest. ---- */
+.pg{border:1px solid var(--line);border-radius:8px;padding:16px 16px 14px;margin:8px 0 20px}
+.pg :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+.pg-vh{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.pg-form{display:flex;gap:8px}
+.pg-form input{
+  flex:1;min-width:0;
+  font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:13.5px;
+  color:var(--text);background:#fff;border:1px solid var(--line);border-radius:6px;
+  padding:9px 12px;
+}
+.pg-form input::placeholder{color:var(--muted);opacity:.75}
+.pg-form button{
+  font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  font-size:13px;font-weight:700;letter-spacing:.02em;
+  background:var(--accent);color:#fff;border:0;border-radius:6px;
+  padding:9px 18px;cursor:pointer;
+}
+.pg-form button:hover{filter:brightness(.92)}
+.pg-label{
+  font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);margin:14px 0 8px;
+}
+.pg-presets{display:flex;flex-wrap:wrap;gap:6px 8px}
+.pg-preset{
+  font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:12px;
+  border:1px solid var(--line);border-radius:999px;background:none;
+  color:var(--muted);padding:3px 11px;cursor:pointer;
+}
+.pg-preset:hover{border-color:var(--accent);color:var(--accent)}
+.pg-rules{margin-top:16px;border-top:1px dotted var(--line);padding-top:12px}
+.pg-rules summary{
+  font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  font-size:12.5px;color:var(--muted);cursor:pointer;
+}
+.pg-rules summary:hover{color:var(--accent)}
+.pg-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+.pg-colh{
+  font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--accent);margin:0 0 6px;
+}
+.pg-cols ol{
+  margin:0 0 0 18px;
+  font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  font-size:12px;line-height:1.55;color:var(--muted);
+}
+.pg-cols li{margin-bottom:4px}
+.pg-cols b{color:var(--text);font-weight:600}
+/* the four-step journey: connector line + state dot per station */
+.pg-result{border-top:1px solid var(--line);margin-top:16px;padding-top:14px}
+.pg-steps{list-style:none;margin:0 0 4px;padding:0}
+.pg-steps li{position:relative;padding-left:30px;margin:0 0 14px}
+.pg-steps li:last-child{margin-bottom:0}
+.pg-steps li::before{content:"";position:absolute;left:8px;top:22px;bottom:-14px;
+  width:2px;background:var(--line)}
+.pg-steps li:last-child::before{display:none}
+.pg-steps li::after{content:"";position:absolute;left:3px;top:5px;width:11px;height:11px;
+  border-radius:50%;background:var(--paper);border:2px solid var(--line)}
+.pg-steps li.pg-hit::after{border-color:var(--accent);background:var(--accent)}
+.pg-steps li.pg-esc::after{border-color:#8a5a2b;background:#8a5a2b}
+.pg-steps li.pg-skip::after{border-style:dashed}
+.pg-steps li.pg-drop::after{border-style:dashed;border-color:var(--muted)}
+.pg-stk{display:block;
+  font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--muted)}
+.pg-steps li.pg-hit .pg-stk{color:var(--accent)}
+.pg-steps li.pg-esc .pg-stk{color:#8a5a2b}
+.pg-stv{display:block;
+  font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  font-size:12.5px;color:var(--text);margin-top:1px}
+.pg-steps li.pg-skip .pg-stv,.pg-steps li.pg-drop .pg-stv,
+.pg-steps li.pg-pending .pg-stv{color:var(--muted)}
+.pg-steps li.pg-pending{opacity:.45}
+@media(prefers-reduced-motion:no-preference){
+  .pg-steps li{transition:opacity .25s ease}
+}
+.pg-json{margin:0 0 10px}
+.pg-dest{
+  font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  font-size:12.5px;font-weight:700;margin:0;
+}
+.pg-dest-ok{color:var(--accent)}
+.pg-dest-rev{color:#8a5a2b}
+.pg-dest-drop{color:var(--muted)}
+@media(max-width:520px){
+  .pg-form{flex-direction:column}
+  .pg-cols{grid-template-columns:1fr}
+}
