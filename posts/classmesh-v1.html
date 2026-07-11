@@ -7,6 +7,7 @@
 <meta property="article:published_time" content="2026-07-09">
 <meta name="description" content="A confidence-gated classification cascade in Go. Deterministic rules first, models next, expensive calls only for what's left. Zero allocations on the hot path.">
 <link rel="canonical" href="https://eitamring.github.io/posts/classmesh-v1.html">
+<link rel="alternate" type="application/atom+xml" title="eitam ring - systems notes" href="/feed.xml">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="eitam ring">
 <meta property="og:title" content="ClassMesh v1: classifying a million log lines for the price of electricity">
@@ -288,14 +289,14 @@ go run ./services/cli/cmd/classmesh run \
       Same seed, same stream, so your counts should match exactly; only the
       wall time is yours.</p>
 
-      <p>Since tagging v1 the repo also ships the full cascade as a runnable
-      demo, not just the rules stage. A second generator, a config that
-      declares both tiers, and three commands (<code>classmesh</code> here is
-      the binary <code>make build</code> puts in <code>bin/</code>):</p>
+      <p>The repo also ships the full cascade as a runnable demo, not just the
+      rules stage: a second generator, a config that declares both tiers, and
+      four commands from a fresh clone:</p>
 
       <pre><code>go run examples/genprod.go -n 1000000 > prod.log
-classmesh validate --config examples/classmesh.yaml
-classmesh run --config examples/classmesh.yaml prod.log > classified.jsonl</code></pre>
+make build
+./bin/classmesh validate --config examples/classmesh.yaml
+./bin/classmesh run --config examples/classmesh.yaml prod.log > classified.jsonl</code></pre>
 
       <p>genprod writes a million production-shaped lines: access logs, health
       probes, payments, auth events, warns, errors, business chatter.

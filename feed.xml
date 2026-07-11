@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>eitam ring - systems notes</title>
+  <subtitle>Go, GPUs, and pipelines that don't allocate</subtitle>
+  <link href="https://eitamring.github.io/feed.xml" rel="self"/>
+  <link href="https://eitamring.github.io/"/>
+  <id>https://eitamring.github.io/</id>
+  <updated>2026-07-09T00:00:00Z</updated>
+  <author><name>Eitam Ring</name></author>
+  <entry>
+    <title>ClassMesh v1: classifying a million log lines for the price of electricity</title>
+    <link href="https://eitamring.github.io/posts/classmesh-v1.html"/>
+    <id>https://eitamring.github.io/posts/classmesh-v1.html</id>
+    <published>2026-07-09T00:00:00Z</published>
+    <updated>2026-07-09T00:00:00Z</updated>
+    <summary>A confidence-gated classification cascade in Go. Deterministic rules first, models next, expensive calls only for what's left. Zero allocations on the hot path.</summary>
+  </entry>
+</feed>
