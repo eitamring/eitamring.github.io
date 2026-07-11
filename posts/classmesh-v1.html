@@ -79,8 +79,9 @@
       <p>ClassMesh is a classification cascade I've been building in Go. The short
       version: a stream of records goes in, each record exits at the cheapest stage
       that can decide it with enough confidence, and only what's left over gets
-      passed to anything expensive. I just tagged v1, so this seemed like a good
-      time to write up how it works and what it does and doesn't do yet.</p>
+      passed to anything expensive. The first tagged release is out, so this
+      seemed like a good time to write up how it works and what it does and
+      doesn't do yet.</p>
 
       <h2 id="why">Why I built it</h2>
 
@@ -238,8 +239,9 @@
       <table>
         <tr><th>Path</th><th>Per record</th><th>Throughput</th><th>Allocs</th></tr>
         <tr><td>Rules stage, first-rule hit</td><td>46 ns</td><td>~22M rec/s</td><td>0</td></tr>
-        <tr><td>Rules stage, worst case (20-rule walk, regex heavy)</td><td>~6-7 µs</td><td>~150k rec/s</td><td>0</td></tr>
-        <tr><td>Full pipeline (engine + rules + sink)</td><td>~500 ns</td><td>~2M rec/s</td><td>0</td></tr>
+        <tr><td>Rules stage, 20-rule regex-heavy miss (benchmark ruleset)</td><td>7-8 µs</td><td>~130k rec/s</td><td>0</td></tr>
+        <tr><td>Full pipeline (engine + rules, discard sink)</td><td>500-550 ns</td><td>~1.8M rec/s</td><td>0</td></tr>
+        <tr><td>Integrated (text source -> rules -> JSONL sink)</td><td>~600 ns</td><td>~1.6M rec/s</td><td>2</td></tr>
       </table>
 
       <p>The allocations column is the one I spent the most time on. The hot path
