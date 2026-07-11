@@ -5,8 +5,16 @@
   <link href="https://eitamring.github.io/feed.xml" rel="self"/>
   <link href="https://eitamring.github.io/"/>
   <id>https://eitamring.github.io/</id>
-  <updated>2026-07-09T00:00:00Z</updated>
+  <updated>2026-07-11T00:00:00Z</updated>
   <author><name>Eitam Ring</name></author>
+  <entry>
+    <title>Ten weekends of CUDA in Go: 30 functions became 106</title>
+    <link href="https://eitamring.github.io/posts/gocudrv-ten-weekends.html"/>
+    <id>https://eitamring.github.io/posts/gocudrv-ten-weekends.html</id>
+    <published>2026-07-11T00:00:00Z</published>
+    <updated>2026-07-11T00:00:00Z</updated>
+    <summary>A progress update on gocudrv, a cgo-free CUDA driver API binding for Go: the thread-pinned executor, embedded PTX, and why the CPU timer was off by 18x.</summary>
+  </entry>
   <entry>
     <title>ClassMesh v1: classifying a million log lines for the price of electricity</title>
     <link href="https://eitamring.github.io/posts/classmesh-v1.html"/>

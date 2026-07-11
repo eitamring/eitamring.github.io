@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ten weekends of CUDA in Go: 30 functions became 106</title>
+<meta name="description" content="A progress update on gocudrv, a cgo-free CUDA driver API binding for Go: the thread-pinned executor, embedded PTX, and why the CPU timer was off by 18x.">
+<link rel="canonical" href="https://eitamring.github.io/posts/gocudrv-ten-weekends.html">
+<meta property="article:published_time" content="2026-07-11">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="eitam ring">
+<meta property="og:title" content="Ten weekends of CUDA in Go: 30 functions became 106">
+<meta property="og:description" content="A progress update on gocudrv, a cgo-free CUDA driver API binding for Go: the thread-pinned executor, embedded PTX, and why the CPU timer was off by 18x.">
+<meta property="og:url" content="https://eitamring.github.io/posts/gocudrv-ten-weekends.html">
+<meta property="og:image" content="https://eitamring.github.io/assets/og-gocudrv-ten-weekends.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ten weekends of CUDA in Go: 30 functions became 106">
+<meta name="twitter:description" content="A progress update on gocudrv, a cgo-free CUDA driver API binding for Go: the thread-pinned executor, embedded PTX, and why the CPU timer was off by 18x.">
+<meta name="twitter:image" content="https://eitamring.github.io/assets/og-gocudrv-ten-weekends.png">
+<link rel="alternate" type="application/atom+xml" title="eitam ring - systems notes" href="/feed.xml">
+<link rel="stylesheet" href="/css/style.css">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='18' cy='12' r='7' fill='%230e7570'/%3E%3Ccircle cx='46' cy='12' r='7' fill='%230e7570'/%3E%3Cellipse cx='32' cy='38' rx='24' ry='22' fill='%230e7570'/%3E%3Ccircle cx='24' cy='32' r='7.5' fill='%23fff'/%3E%3Ccircle cx='40' cy='32' r='7.5' fill='%23fff'/%3E%3Ccircle cx='26' cy='33' r='3' fill='%231f2933'/%3E%3Ccircle cx='38' cy='33' r='3' fill='%231f2933'/%3E%3Cellipse cx='32' cy='43' rx='6' ry='4.5' fill='%23d7ebe9'/%3E%3Ccircle cx='32' cy='40.5' r='1.8' fill='%231f2933'/%3E%3Crect x='28.6' y='45' width='3.2' height='4.5' rx='1' fill='%23fff'/%3E%3Crect x='32.2' y='45' width='3.2' height='4.5' rx='1' fill='%23fff'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header class="site">
+  <div class="container">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 64 64" width="38" height="38" aria-hidden="true">
+        <circle cx="18" cy="12" r="7" fill="#0e7570"/>
+        <circle cx="46" cy="12" r="7" fill="#0e7570"/>
+        <circle cx="18" cy="12" r="3" fill="#d7ebe9"/>
+        <circle cx="46" cy="12" r="3" fill="#d7ebe9"/>
+        <ellipse cx="32" cy="38" rx="24" ry="22" fill="#0e7570"/>
+        <circle cx="24" cy="32" r="7.5" fill="#fff"/>
+        <circle cx="40" cy="32" r="7.5" fill="#fff"/>
+        <circle cx="26" cy="33" r="3" fill="#1f2933"/>
+        <circle cx="38" cy="33" r="3" fill="#1f2933"/>
+        <ellipse cx="32" cy="43" rx="6" ry="4.5" fill="#d7ebe9"/>
+        <circle cx="32" cy="40.5" r="1.8" fill="#1f2933"/>
+        <rect x="28.6" y="45" width="3.2" height="4.5" rx="1" fill="#fff"/>
+        <rect x="32.2" y="45" width="3.2" height="4.5" rx="1" fill="#fff"/>
+      </svg>
+      <div>
+        <div class="name"><a href="/">eitam ring</a></div>
+        <div class="tagline">systems notes - Go, GPUs, and pipelines that don't allocate</div>
+      </div>
+    </div>
+    <nav>
+      <a href="/">posts</a>
+      <a href="https://github.com/eitamring/gocudrv">gocudrv</a>
+      <a href="https://github.com/ClassMesh/classmesh">classmesh</a>
+      <a href="https://github.com/eitamring">github</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="post-grid">
+
+    <nav class="rail toc" aria-label="Table of contents">
+      <h4>contents</h4>
+      <a href="#what">Where this left off</a>
+      <a href="#now">What exists now</a>
+      <a href="#executor">The executor, grown up</a>
+      <a href="#timer">Some hardship I discovered along the way</a>
+      <a href="#binary">One small binary, no toolkit</a>
+      <a href="#limits">Honest limits</a>
+      <a href="#next">What's next</a>
+    </nav>
+
+    <article>
+      <h1>Ten weekends of CUDA in Go: 30 functions became 106</h1>
+      <div class="meta">2026-07-11 · <a href="https://github.com/eitamring/gocudrv">code on GitHub</a> · Go, pure Go, MIT</div>
+
+      <p>gocudrv is my weekend project: CUDA's driver API from Go with no cgo,
+      no toolkit at build time, and the driver library loaded at runtime. When I
+      posted the week-3 version, someone in the comments counted my binding
+      table and pointed out I had implemented about 30 functions out of the
+      roughly 380 in cuda.h. Fair. It's 106 now, and more importantly the parts
+      around the bindings, the parts that made me want a wrapper in the first
+      place, actually work: contexts that survive goroutines, streams and
+      events, embedded PTX, and a static binary that runs on a machine that has
+      never seen the CUDA toolkit.</p>
+
+      <p>Still a weekend project. Still learning CUDA in public. This is the
+      update.</p>
+
+      <h2 id="what">Where this left off</h2>
+
+      <p>The pitch hasn't changed: most Go CUDA packages need cgo and the
+      toolkit headers at build time, which breaks cross-compilation and makes
+      deploy images heavy. gocudrv loads libcuda.so.1 (or nvcuda.dll) at
+      runtime the way purego loads libc, does the calling-convention work
+      itself, and puts a Go-shaped API on top. Your build is
+      <code>CGO_ENABLED=0 go build</code>, from any OS, and the only thing the
+      target machine needs is the NVIDIA driver it already has.</p>
+
+      <h2 id="now">What exists now</h2>
+
+      <p>Since week 3: the binding table went from ~30 to 106 driver symbols,
+      typed device buffers (<code>cuda.Alloc[float32]</code>), primary
+      contexts, streams, events with hardware timing, module loading from
+      embedded PTX with the driver's JIT, host callbacks, occupancy queries,
+      and a device-info tool. Tagged v0.2.0 this week. The four examples in the
+      repo all run from a fresh clone; the event-pipeline one runs two
+      overlapped copy/compute batches and reports GPU time from CUDA events
+      (5.5ms for 2x1M floats on my 4070 Ti, driver 13.1).</p>
+
+      <h2 id="executor">The executor, grown up</h2>
+
+      <p>The thing I teased in the week-3 post is now the load-bearing piece.
+      CUDA's driver tracks the current context as per-OS-thread state. Go
+      moves goroutines between OS threads whenever it likes. Put those two
+      sentences next to each other and you can see the crash coming: a
+      goroutine sets up a context, gets migrated, and its next driver call
+      executes on a thread where the context stack is empty or, worse, belongs
+      to a different device.</p>
+
+      <p>gocudrv's answer: every context owns one worker goroutine pinned to an
+      OS thread with <code>runtime.LockOSThread</code>, and every driver call
+      for that context is a closure sent down a channel to that worker. Your
+      goroutines never touch the driver directly, so there is no
+      thread-affinity footgun to hold wrong.</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 660 240" width="660" role="img" aria-label="Many goroutines send driver calls through a channel to one worker goroutine locked to an OS thread, which is the only caller into libcuda.">
+          <defs>
+            <marker id="xarr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#61707d"/>
+            </marker>
+          </defs>
+          <style>
+            .xbox{fill:#e8f1f0;stroke:#0e7570;stroke-width:1.2}
+            .xalt{fill:#f7f9fa;stroke:#61707d;stroke-width:1.2;stroke-dasharray:5 4}
+            .xlbl{font:11.5px ui-monospace,Menlo,Consolas,monospace;fill:#1f2933}
+            .xmut{font:11px ui-monospace,Menlo,Consolas,monospace;fill:#61707d}
+            .xhd{font:600 12px ui-monospace,Menlo,Consolas,monospace;fill:#0e7570}
+            .xline{stroke:#61707d;stroke-width:1.2;fill:none}
+          </style>
+          <rect class="xalt" x="10" y="30" width="130" height="34" rx="8"/>
+          <text class="xlbl" x="75" y="51" text-anchor="middle">goroutine</text>
+          <rect class="xalt" x="10" y="100" width="130" height="34" rx="8"/>
+          <text class="xlbl" x="75" y="121" text-anchor="middle">goroutine</text>
+          <rect class="xalt" x="10" y="170" width="130" height="34" rx="8"/>
+          <text class="xlbl" x="75" y="191" text-anchor="middle">goroutine</text>
+          <text class="xmut" x="75" y="228" text-anchor="middle">migrate freely</text>
+          <line class="xline" x1="140" y1="47" x2="238" y2="105" marker-end="url(#xarr)"/>
+          <line class="xline" x1="140" y1="117" x2="238" y2="117" marker-end="url(#xarr)"/>
+          <line class="xline" x1="140" y1="187" x2="238" y2="129" marker-end="url(#xarr)"/>
+          <rect class="xbox" x="240" y="96" width="120" height="42" rx="8"/>
+          <text class="xhd" x="300" y="121" text-anchor="middle">channel</text>
+          <line class="xline" x1="360" y1="117" x2="428" y2="117" marker-end="url(#xarr)"/>
+          <rect class="xbox" x="430" y="82" width="140" height="70" rx="8"/>
+          <text class="xhd" x="500" y="106" text-anchor="middle">worker goroutine</text>
+          <text class="xmut" x="500" y="124" text-anchor="middle">LockOSThread</text>
+          <text class="xmut" x="500" y="140" text-anchor="middle">owns the context</text>
+          <line class="xline" x1="570" y1="117" x2="596" y2="117" marker-end="url(#xarr)"/>
+          <text class="xlbl" x="602" y="112">libcuda</text>
+                  </svg>
+        <figcaption>every driver call for a context funnels through its pinned worker</figcaption>
+      </figure>
+
+      <p>The price is a channel hop per call. For chatty per-call workloads
+      that matters and I want to measure it honestly against cgo before making
+      claims, but the design goal was correctness first: the race is the kind
+      that works fine on your machine and corrupts a context in production.</p>
+
+      <h2 id="timer">Some hardship I discovered along the way</h2>
+
+      <p>In the week-3 post I mentioned a discrepancy that confused me: my CPU
+      timer said a 10M-element vector add took ~160&#181;s, CUDA's event API
+      said ~434&#181;s. I assumed I had an overhead problem somewhere. I did
+      not. I had a measurement problem: kernel launches are asynchronous, so
+      <code>time.Since</code> around the launch call measures how long it took
+      to <em>enqueue</em> the work, not to do it.</p>
+
+      <p>Now that events work properly, here is the same 10M vector add on the
+      4070 Ti today, three consecutive timed runs after a warm-up:</p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 660 150" width="660" role="img" aria-label="Enqueue time measured by the CPU timer is about 16 microseconds; actual kernel time from GPU events is about 283 microseconds.">
+          <style>
+            .tbox{fill:#f7f9fa;stroke:#61707d;stroke-width:1.2;stroke-dasharray:5 4}
+            .tnew{fill:#e8f1f0;stroke:#0e7570;stroke-width:1.2}
+            .tlbl{font:11.5px ui-monospace,Menlo,Consolas,monospace;fill:#1f2933}
+            .tmut{font:11px ui-monospace,Menlo,Consolas,monospace;fill:#61707d}
+          </style>
+          <rect class="tbox" x="10" y="18" width="36" height="30" rx="6"/>
+          <text class="tlbl" x="56" y="38">time.Since around the launch: ~16&#181;s (the lie)</text>
+          <rect class="tnew" x="10" y="70" width="566" height="30" rx="6"/>
+          <text class="tlbl" x="20" y="90">cuEventElapsedTime: ~283&#181;s (the kernel)</text>
+          <text class="tmut" x="10" y="134">10M float32 vector add, RTX 4070 Ti, driver 13.1, steady state over 3 runs</text>
+        </svg>
+        <figcaption>the CPU timer measures the enqueue; the GPU events measure the work</figcaption>
+      </figure>
+
+      <p>Steady state the gap is roughly 18x. It gets worse: the enqueue cost
+      itself drops from ~172&#181;s on the first timed run to ~16&#181;s once
+      the driver has warmed up, so a naive benchmark is wrong twice in
+      opposite directions. If you are timing GPU work with a host clock and
+      not synchronizing first, you are publishing enqueue latency. The event
+      API is not optional; it is the measurement.</p>
+
+      <h2 id="binary">One small binary, no toolkit</h2>
+
+      <p>The part that still makes me smile: <code>go generate</code> compiles
+      the .cu to PTX once (that is the only step that needs nvcc, on my dev
+      machine), the PTX ships inside the binary via <code>go:embed</code>, and
+      the driver JIT-compiles it for whatever GPU it lands on. The stripped
+      vector-add demo is a 1.78MB static binary. Copy it to any Linux box with
+      an NVIDIA driver and it runs. No toolkit, no shared-library hunt, no
+      container layer full of CUDA packages. Module JIT for that small kernel
+      costs well under a millisecond warm; cold-start JIT across kernel sizes
+      is the next post, because the numbers surprised me and I want to measure
+      them properly before writing them down.</p>
+
+      <h2 id="limits">Honest limits</h2>
+
+      <p>NVIDIA-only, Linux and Windows only, and the surface is 106 functions
+      out of roughly 380, grown strictly by what I actually use and test. The
+      per-call channel-hop overhead is real and unmeasured against cgo, so I
+      make no performance claims about launch-heavy workloads yet. CUDA Graphs
+      and multi-GPU are still on the workbench. And I remain a CUDA noob on a
+      weekend schedule; the project moves slowly on purpose, because I want to
+      understand every function I bind.</p>
+
+      <h2 id="next">What's next</h2>
+
+      <p>The JIT cold-start measurements, CUDA Graphs, and the FFI overhead
+      comparison people keep asking about. If you have a 50-series card, or
+      any setup weirder than my single 4070 Ti, I would genuinely love failure
+      reports: the repo is
+      <a href="https://github.com/eitamring/gocudrv">github.com/eitamring/gocudrv</a>
+      and the examples run in under a minute from a fresh clone.</p>
+    </article>
+
+    <aside class="rail repos" aria-label="Code links">
+      <h4>code</h4>
+      <a href="https://github.com/eitamring/gocudrv">gocudrv</a>
+      <div class="desc">this post's repo</div>
+      <a href="https://github.com/ClassMesh/classmesh">classmesh</a>
+      <div class="desc">classification cascade in Go</div>
+      <a href="https://github.com/eitamring">github profile</a>
+      <div class="desc">everything else</div>
+    </aside>
+
+  </div>
+</main>
+
+<footer class="site">
+  <div class="container">
+    © eitam ring · <a href="https://github.com/eitamring">github</a>
+  </div>
+</footer>
+
+</body>
+</html>
