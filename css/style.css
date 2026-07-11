@@ -1,7 +1,5 @@
-/* eitamring.github.io — one stylesheet, no build step.
-   Palette: cool architectural off-white + slate text + teal accent.
-   2026 direction: soft cold white (not cream, not dark), single accent.
-   Contrast checked: text 13.9:1, accent on paper 5.6:1 (WCAG AA+). */
+/* eitamring.github.io - one stylesheet, no build step.
+   Cool off-white paper, slate text, single teal accent. */
 
 :root{
   --paper:#f7f9fa;       /* cool off-white, architectural */
